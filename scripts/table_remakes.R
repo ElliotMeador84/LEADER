@@ -26,231 +26,224 @@ if(op_is_window == T){
 
 # Table remakes --------------
 
-
-df_ls <- projects_working %>% 
-    count(local_action_group, 
-          farm_diversification_enterprise_sub_type, 
-          sort = T)%>% 
-    group_split(farm_diversification_enterprise_sub_type) %>% 
-    map(., function(x){
-        x %>% 
-            select(1, 3)
-    }) 
+projects_working %>% 
+    count(status, sort = T) %>% 
+    print_all()
 
 
-# merge into one table
+status_include <- 
+    c('Live', 
+      'Completed', 
+      'Awaiting Start',
+      'In Process',
+      'Approved - Awaiting Signed Offer of Grant', 
+      'Approved - Issue Offer of Grant', 
+      'Approved', 
+      'Approved with Conditions', 
+      'Final Claim Made')
 
-table_remake <- projects_working %>% 
-    distinct(local_action_group)
 
-for (i in seq_along(df_ls)){
-    table_remake <- table_remake %>% 
-        left_join(df_ls[[i]], 
-                  by = "local_action_group")
+lag_cleaner <- function(x){
+    x <- str_remove_all(x, 'Local Action Group')
+    x <- str_remove_all(x, 'LEADER')
+    x <- str_replace_all(x, '\\band\\b', '&')
+    x <- str_squish(str_trim(x))
+    x
 }
 
 
-status_intrest <- c('Withdrawn', 
-                    'Rejected', 
-                    'Rework')
+eva_table <- list()
 
-df_ls.i <- projects_working %>% 
-    filter(status %in% status_intrest) %>% 
-    count(local_action_group, status) %>% 
-    group_split(status) %>% 
-    map(., function(x){
-        x %>% 
-            select(1, 3)
-    }) %>% 
-    set_names('reject', 'rework', 'withdrawn')
+# Percent withdrawn
 
 
-for (i in seq_along(df_ls.i)){
-    table_remake <- table_remake %>% 
-        left_join(df_ls.i[[i]], 
-                  by = "local_action_group")
+eva_table$percent_withdrawn <- projects_working %>% 
+    select(lag = local_action_group, 
+           status) %>% 
+    mutate(withdrawn = case_when(status == 'Withdrawn'~1, T~0)) %>% 
+    group_by(lag) %>% 
+    summarise(percent_withdrawn = percent(mean(withdrawn, na.rm = T))) %>% 
+    arrange(lag) %>% 
+    mutate(lag = lag_cleaner(lag)) %>% 
+    set_names('lag', 
+              'Percent withdrawn')
+
+
+
+projects_working %>%
+  count(status, sort = T) %>% 
+  print_all()
+
+
+# Percent rejected
+eva_table$percent_rejected <- projects_working %>% 
+  select(lag = local_action_group, 
+         status) %>% 
+  mutate(rejected = case_when(status == 'Rejected'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_rejected = percent(mean(rejected, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            'Percent rejected')
+
+
+# Argyll has a lot of 
+projects_working %>% 
+  filter(str_detect(local_action_group, 'Argyl')) %>% 
+  count(status, sort = T) %>% 
+  mutate(status = fct_reorder(status, n)) %>% 
+  ggplot(aes(status, n))+
+  geom_col()+
+  coord_flip()+
+  theme_minimal()+
+  labs(title = 'Argyll Status Counts')
+
+# Percent rework
+eva_table$percent_rework <- projects_working %>% 
+  select(lag = local_action_group, 
+         status) %>% 
+  mutate(rework = case_when(status == 'Rework'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_rework = percent(mean(rework, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            'Percent rework')
+
+
+
+
+
+
+projects_working %>% 
+  count(farm_diversification_enterprise_sub_type, sort = T)
+
+
+ # Community
+eva_table$percent_community <- projects_working %>% 
+  filter(status %in% status_include) %>% 
+  select(lag = local_action_group, 
+         type = farm_diversification_enterprise_sub_type) %>% 
+  mutate(community = case_when(type == 'Community'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_community = percent(mean(community, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            '*Community')
+
+
+
+# Small Medium Enterprise - Micro <10 Staff
+eva_table$percent_sme_micro <- projects_working %>% 
+  filter(status %in% status_include) %>% 
+  select(lag = local_action_group, 
+         type = farm_diversification_enterprise_sub_type) %>% 
+  mutate(sme_micro = case_when(type == 'Small Medium Enterprise - Micro <10 Staff'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_sme_micro = percent(mean(sme_micro, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            '*Small Medium Enterprise - Micro <10 Staff')
+
+
+
+
+# Small Medium Enterprise - Small < 50 Staff
+eva_table$percent_sme_small <- projects_working %>% 
+  filter(status %in% status_include) %>% 
+  select(lag = local_action_group, 
+         type = farm_diversification_enterprise_sub_type) %>% 
+  mutate(sme_small = case_when(type == 'Small Medium Enterprise - Small <50 Staff'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_sme_small = percent(mean(sme_small, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            '*Small Medium Enterprise - Small <50 Staff')
+
+
+
+# Farm Diversification
+eva_table$percent_farm_diversification <- projects_working %>% 
+  filter(status %in% status_include) %>% 
+  select(lag = local_action_group, 
+         type = farm_diversification_enterprise_sub_type) %>% 
+  mutate(farm_div = case_when(type == 'Farm Diversification'~1, T~0)) %>% 
+  group_by(lag) %>% 
+  summarise(percent_farm_div = percent(mean(farm_div, na.rm = T))) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            '*Farm Diversification')
+
+
+
+
+# Number of applications
+eva_table$number_applications <- projects_working %>% 
+  count(lag = local_action_group) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            'Number of applications')
+
+
+# Approval rate
+eva_table$number_approvals <- projects_working %>% 
+  filter(status %in% status_include) %>%
+  count(lag = local_action_group) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag)) %>% 
+  set_names('lag', 
+            'Number of approvals')
+
+
+eva_table$approval_rate <- number_applications %>% 
+  bind_cols(select(number_approvals, -lag)) %>% 
+  mutate(approval_rate = percent(`Number of approvals`/ `Number of applications`)) %>% 
+  select(lag, `Approval rate` = approval_rate)
+
+
+
+lag_df <- projects_working %>% 
+  distinct(lag = local_action_group) %>% 
+  arrange(lag) %>% 
+  mutate(lag = lag_cleaner(lag))
+
+
+
+
+eva_table
+
+for (i in seq_along(eva_table)){
+  lag_df <-   lag_df %>% 
+    left_join(eva_table[[i]], by = 'lag')
 }
 
+lag_df <- lag_df %>% 
+  rename('Local Action Group' = lag)
 
-new.names <- c('local_action_group',unique(projects_working$farm_diversification_enterprise_sub_type), 'reject', 'rework', 'withdrawn')
+write.xlsx(lag_df,
+           file = 'data_write/LEADER_data_table.xlsx', 
+           sheetName = 'Eva_table_remake')
 
 
-names(table_remake) <- new.names
 
-table_remake
 
-lag_s.p <- function(.df, .var) {
-    .df %>%
-        mutate(total = sum(!!ensym(.var), na.rm = T)) %>% 
-        group_by(local_action_group) %>% 
-        mutate(sum = sum(!!ensym(.var), 
-                         na.rm = T), 
-               per.tot = percent(sum/total)) %>% 
-        select(local_action_group, sum, per.tot) %>% 
-        distinct() }
 
 
 
 
-# approved project costs
 
-df <- projects_working %>% 
-    group_by(local_action_group) %>% 
-    summarise(approved_project_cost = 
-                  sum(approved_project_cost, na.rm = T), 
-              approved_grant = 
-                  sum(approved_grant, na.rm = T), 
-              match_funding = 
-                  sum(match_funding, na.rm = T)) %>% 
-    ungroup() %>% 
-    mutate(tot = approved_grant + match_funding) %>% 
-    glimpse()
 
 
 
 
 
 
-Eva_table_remake <- table_remake %>% 
-    left_join(df) %>% 
-    arrange(local_action_group) %>% 
-    mutate_at(vars(names(.)), replace_na, 0) 
-
-
-
-eva.names <- names(Eva_table_remake)
-
-
-names(Eva_table_remake) <- 
-    str_replace_all(eva.names, '_', ' ') %>% 
-    str_to_title()
-
-
-
-
-# Promoter_type -----------------
-projects_full %>% 
-    count(promoter_type, organisation_name, sort = T) %>% 
-    arrange(promoter_type)
-
-projects_full %>% 
-    summarise(app_grant = mean(approved_grant, na.rm = T), 
-              sd = sd(approved_grant, na.rm = T))
-
-
-projects_full %>% 
-    drop_na(approved_grant) %>% 
-    ggplot(aes(approved_grant))+
-    geom_histogram()+
-    scale_x_continuous(labels = dollar)+
-    facet_grid(promoter_type~.)
-
-
-
-projects_full %>% 
-    group_by(promoter_type) %>% 
-    summarise(min  = min(approved_grant, na.rm = T), 
-              max = max(approved_grant, na.rm = T), 
-              mean = mean(approved_grant, na.rm = T), 
-              median = median(approved_grant, na.rm = T), 
-              n = n())
-
-
-
-
-
-projects_full %>% 
-    filter(status %in% c('Rejected', 'Live')) %>% 
-    count(promoter_type, status, sort = T) %>% 
-    arrange(promoter_type) %>% 
-    na.omit() %>% 
-    spread(status, n) %>% 
-    mutate(ratio = Live/Rejected)
-
-
-
-
-
-leader_2000_2006 <- read_csv('C:/Users/emeador/Downloads/Leader_2000_2000_data.csv', locale = locale(encoding = "windows-1252")) %>% 
-    clean_names() %>% 
-    mutate(leader_grant = parse_number(leader_grant))
-
-
-promoter_type_ls <- projects_full %>% 
-    select(organisation_name, promoter_type) %>% 
-    mutate(organisation_name = str_to_lower(organisation_name)) %>% 
-    group_split(promoter_type) %>% 
-    map(., function(x){
-        x %>% 
-            pull(organisation_name) %>% 
-            unique()
-    }) %>% 
-    set_names('sme', 'public', 'other', 'missing')
-
-
-# project sponser is the organisation
-
-# 2006 project that also appear in 2015
-
-leader_2006_match <- 
-    map2_df(promoter_type_ls, names(promoter_type_ls), function(x, y){
-        leader_2000_2006 %>% 
-            mutate(project_sponsor = str_to_lower(project_sponsor), 
-                   leader_grant = parse_number(leader_grant)) %>% 
-            filter(project_sponsor %in% x) %>% 
-            group_by(project_sponsor) %>% 
-            mutate(n = n(), 
-                   mean_grant = mean(leader_grant, na.rm = T), 
-                   promoter_type = y) %>% 
-            ungroup() %>% 
-            select(project_sponsor_2006 = project_sponsor, promoter_type, approved_grant_2006 = mean_grant, n_2006 = n)
-    }) %>% 
-    distinct()
-
-
-
-match_2006_v <- leader_2006_match %>% 
-    pull(project_sponsor_2006) %>% 
-    unique()
-
-
-
-
-leader_2016_match <- projects_full %>% 
-    mutate(organisation_name = str_to_lower(organisation_name)) %>% 
-    filter(organisation_name %in% match_2006_v) %>% 
-    group_by(organisation_name) %>% 
-    mutate(approved_grant_2016 = mean(approved_grant, na.rm = T), 
-           n_2016 = n()) %>% 
-    select(organisation_name, approved_grant_2016, n_2016) %>% 
-    distinct()
-
-
-
-
-match_project_type <- leader_2006_match %>% 
-    left_join(leader_2016_match, 
-              by = c('project_sponsor_2006' = 'organisation_name'))
-
-
-
-View(match_project_type)
-
-
-
-leader_2000_2006 %>% 
-   glimpse()
-
-# Write to file for Rob --------------
-
-LEADER.table <- list(projects_working,leader_2000_2006, Eva_table_remake,match_project_type)
-
-names(LEADER.table) <- c('LARCS+', 'LEADER_2000_2006', 'Eva_table_remake', 'project_matches')
-
-unlink('data/LEADER_process.xlsx')
-writexl::write_xlsx(LEADER.table, 
-                    path = 'data/LEADER_process.xlsx', 
-                    col_names = T)
 
 
 
